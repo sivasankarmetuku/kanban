@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kanban Board (Hybrid Storage + Colors)</title>
+<style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #1e1e1e;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { margin: 20px 0; }
+    .board {
+      display: flex;
+      gap: 15px;
+      margin: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .column {
+      background: #2e2e2e;
+      padding: 10px;
+      border-radius: 10px;
+      width: 220px;
+      min-height: 300px;
+    }
+    .column h2 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .task {
+      background: #444;
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 5px;
+      cursor: grab;
+    }
+    .task[contenteditable="true"] {
+      outline: 2px solid #4cafef;
+      cursor: text;
+    }
+    .controls {
+      margin: 15px;
+    }
+    #taskInput {
+      width: 250px;
+      padding: 8px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: none;
+    }
+    #taskColor {
+      width: 40px;
+      height: 40px;
+      border: none;
+      cursor: pointer;
+      margin-left: 5px;
+      vertical-align: middle;
+    }
+    button {
+      margin: 5px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 5px;
+      background: #4cafef;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #45a0e0;
+    }
+    #dustbin {
+      background: #8b0000;
+    }
+    #dustbin h2 {
+      color: #ffb3b3;
+    }
+</style>
+</head>
+<body>
+<h1>Kanban Board (Hybrid Storage + Colors)</h1>
+ 
+  <div class="controls">
+<input type="text" id="taskInput" placeholder="New Task"
+           onkeypress="handleKeyPress(event)">
+<input type="color" id="taskColor" value="#444444">
+<button onclick="addTask()">Add to To-Do</button>
+<button onclick="exportBoard()">Export JSON</button>
+<input type="file" id="fileInput" onchange="importBoard(event)">
+</div>
+ 
+  <div class="board">
+<div class="column" id="todo" ondrop="drop(event)" ondragover="allowDrop(event)">
+<h2>To-Do</h2>
+</div>
+<div class="column" id="inprogress" ondrop="drop(event)" ondragover="allowDrop(event)">
+<h2>In Progress</h2>
+</div>
+<div class="column" id="onhold" ondrop="drop(event)" ondragover="allowDrop(event)">
+<h2>On Hold</h2>
+</div>
+<div class="column" id="completed" ondrop="drop(event)" ondragover="allowDrop(event)">
+<h2>Completed</h2>
+</div>
+<div class="column" id="dustbin" ondrop="drop(event)" ondragover="allowDrop(event)">
+<h2>🗑 Dustbin</h2>
+</div>
+</div>
+<div class="footer">Created by Sadik Pathan</div>
+ 
+  <script>
+    let dragged = null;
+ 
+    function addTask() {
+      const input = document.getElementById("taskInput");
+      const colorInput = document.getElementById("taskColor");
+      const taskText = input.value.trim();
+      const taskColor = colorInput.value;
+      if (taskText === "") return;
+ 
+      const task = createTaskElement(taskText, taskColor);
+      document.getElementById("todo").appendChild(task);
+      input.value = "";
+      saveBoard();
+    }
+ 
+    function handleKeyPress(event) {
+      if (event.key === "Enter") {
+        addTask();
+      }
+    }
+ 
+    function createTaskElement(text, color = "#444444") {
+      const task = document.createElement("div");
+      task.className = "task";
+      task.textContent = text;
+      task.style.background = color;
+      task.draggable = true;
+      task.ondragstart = drag;
+ 
+      // Enable in-place editing on double-click
+      task.ondblclick = () => {
+        task.contentEditable = true;
+        task.focus();
+      };
+ 
+      // Save changes on blur or Enter key
+      task.onblur = () => {
+        task.contentEditable = false;
+        saveBoard();
+      };
+      task.onkeypress = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault(); // prevent newline
+          task.blur();
+        }
+      };
+ 
+      return task;
+    }
+ 
+    function allowDrop(ev) {
+      ev.preventDefault();
+    }
+ 
+    function drag(ev) {
+      dragged = ev.target;
+    }
+ 
+    function drop(ev) {
+      ev.preventDefault();
+      if (dragged) {
+        if (ev.currentTarget.id === "dustbin") {
+          dragged.remove();
+        } else {
+          ev.currentTarget.appendChild(dragged);
+        }
+        saveBoard();
+      }
+    }
+ 
+    function getTasks(columnId) {
+      return Array.from(document.getElementById(columnId).querySelectorAll(".task"))
+                  .map(task => ({
+                    text: task.textContent,
+                    color: task.style.background
+                  }));
+    }
+ 
+    function saveBoard() {
+      const boardData = {
+        todo: getTasks("todo"),
+        inprogress: getTasks("inprogress"),
+        onhold: getTasks("onhold"),
+        completed: getTasks("completed"),
+        dustbin: getTasks("dustbin"),
+      };
+      localStorage.setItem("kanbanBoard", JSON.stringify(boardData));
+    }
+ 
+    function loadBoard() {
+      const saved = localStorage.getItem("kanbanBoard");
+      if (saved) {
+        restoreBoard(JSON.parse(saved));
+      }
+    }
+ 
+    function exportBoard() {
+      const boardData = {
+        todo: getTasks("todo"),
+        inprogress: getTasks("inprogress"),
+        onhold: getTasks("onhold"),
+        completed: getTasks("completed"),
+        dustbin: getTasks("dustbin"),
+      };
+ 
+      const blob = new Blob([JSON.stringify(boardData, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "kanban-data.json";
+      link.click();
+    }
+ 
+    function importBoard(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+ 
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = JSON.parse(e.target.result);
+        restoreBoard(data);
+        saveBoard();
+      };
+      reader.readAsText(file);
+    }
+ 
+    function restoreBoard(data) {
+      ["todo", "inprogress", "onhold", "completed", "dustbin"].forEach(colId => {
+        const col = document.getElementById(colId);
+        col.querySelectorAll(".task").forEach(t => t.remove());
+        (data[colId] || []).forEach(item => {
+          if (typeof item === "string") {
+            const task = createTaskElement(item);
+            col.appendChild(task);
+          } else {
+            const task = createTaskElement(item.text, item.color);
+            col.appendChild(task);
+          }
+        });
+      });
+    }
+ 
+    window.onload = loadBoard;
+</script>
+</body>
+</html>
